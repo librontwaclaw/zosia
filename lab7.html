@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Laboratorium Fizyczne: Standaryzowana Akwizycja Danych</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 10px; background-color: #f4f6f9; color: #333; }
+        .container { max-width: 950px; margin: 0 auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 5px; font-size: 20px; }
+        .game-layout { display: flex; gap: 15px; margin-bottom: 15px; align-items: stretch; }
+        .action-button-zone { width: 150px; display: flex; flex-direction: column; justify-content: center; }
+        .canvas-zone { flex-grow: 1; position: relative; border: 2px solid #b0bec5; border-radius: 6px; overflow: hidden; }
+        canvas { display: block; width: 100%; background-color: #e0f7fa; }
+        .time-display { position: absolute; top: 10px; right: 15px; background: rgba(0,0,0,0.8); color: #fff; padding: 6px 12px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 15px; font-weight: bold; min-width: 110px; text-align: center; }
+        .btn-game { width: 100%; height: 100%; min-height: 120px; color: white; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; font-weight: bold; transition: background 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.2); text-transform: uppercase; }
+        .btn-start-state { background-color: #2ecc71; }
+        .btn-start-state:active { background-color: #27ae60; }
+        .btn-running-state { background-color: #7f8c8d; cursor: not-allowed; }
+        .inputs { background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 15px; display: flex; justify-content: center; gap: 15px; align-items: center; }
+        .slider-group { display: flex; flex-direction: column; align-items: center; }
+        label { font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #2c3e50; }
+        input[type=range] { width: 220px; }
+        .num-badge { font-size: 20px; font-weight: bold; color: #3498db; background: white; padding: 3px 12px; border-radius: 15px; border: 2px solid #3498db; }
+        
+        .table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px; }
+        .table-title { font-weight: bold; color: #2c3e50; font-size: 15px; }
+        .btn-copy { background-color: #3498db; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 13px; transition: background 0.2s; }
+        .btn-copy:hover { background-color: #2980b9; }
+        .btn-copy:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        
+        .table-wrapper { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 14px; }
+        th { background-color: #2c3e50; color: white; position: sticky; top: 0; z-index: 10; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .row-auto-measured { background-color: #e8f4fd; font-weight: 500; }
+        .instrukcja-zadania { padding: 12px; background-color: #fff3cd; border-left: 5px solid #ffc107; border-radius: 4px; font-size: 13px; line-height: 1.4; color: #664d03; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 E-Laboratorium: Akwizycja Danych Kinematycznych (Stała liczba prób)</h1>
+    <div class="game-layout">
+        <div class="action-button-zone"><button class="btn-game btn-start-state" id="masterBtn" onclick="uruchomEksperymentAutomatyczny()">Start<br>🚀</button></div>
+        <div class="canvas-zone">
+            <div class="time-display" id="clock-display">Rozbieg...</div>
+            <canvas id="simCanvas" width="900" height="220"></canvas>
+        </div>
+    </div>
+    <div class="inputs">
+        <div class="slider-group">
+            <label for="num_dziennik">Numer w dzienniku:</label>
+            <input type="range" id="num_dziennik" min="1" max="35" value="1" oninput="aktualizujNumer(this.value)">
+            <div class="num-badge" id="num-val">1</div>
+        </div>
+    </div>
+    <div class="instrukcja-zadania">
+        <strong>📈 Instrukcja laboratoryjna:</strong> Prędkość Zosi została zsynchronizowana z Twoim numerem z dziennika, dzięki czemu każdy pomiar trwa dokładnie 20 sekund i generuje przejrzystą serię 200 próbek. Po zakończeniu kliknij <strong>„Kopiuj dane do Excela”</strong>.
+    </div>
+
+    <div class="table-toolbar">
+        <div class="table-title">📋 Seria pomiarowa:</div>
+        <button class="btn-copy" id="copyBtn" onclick="kopiujTabeleDoSchowka()" disabled>Kopiuj dane do Excela 📋</button>
+    </div>
+
+    <div class="table-wrapper">
+        <table id="table-pomiary">
+            <thead>
+                <tr><th>Próbka</th><th>Czas t (s)</th><th>Droga Zosi s_Z (m)</th><th>Droga Staszka s_S (m)</th></tr>
+            </thead>
+            <tbody id="table-body">
+                <tr><td colspan="4" style="color: #7f8c8d; font-style: italic;">Kliknij START, aby wygenerować serię pomiarową...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    let animationId = null; const canvas = document.getElementById('simCanvas'); const ctx = canvas.getContext('2d');
+    let tGlobalne = -3; let vZosiaGlobalna = 0; let v0StaszekGlobalny = 0; let aGlobalne = 0; let tHGlobalne = 0; let sHGlobalna = 0; let tSpotkaniaGlobalne = 20.0; // WYMUSZONY STAŁY CZAS 20 SEKUND
+    let stanGry = "STOPPED"; let nastepnyKrokCzasowy = 0.0; let numerProbki = 0;
+    function formatujLiczbe(val) { return val.toFixed(4).replace('.', ','); }
+    function aktualizujNumer(val) { document.getElementById('num-val').innerText = val; }
+    rysujScenerie(-0.1, -0.1, -3, false);
+    function rysujScenerie(posZosia, posStaszek, t, czyHamuje) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#e0f7fa"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#546e7a"; ctx.fillRect(0, 100, canvas.width, 85);
+        ctx.fillStyle = "#81c784"; ctx.fillRect(0, 185, canvas.width, 35);
+        ctx.fillStyle = "#7cb342"; ctx.fillRect(0, 80, canvas.width, 20);
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 142); ctx.lineTo(canvas.width, 142); ctx.stroke();
+
+        const margines = 50; const szerokoscRuchu = canvas.width - 120;
+
+        let xStart = margines + (0.25 * szerokoscRuchu);
+        ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(xStart, 142); ctx.lineTo(xStart, 185); ctx.stroke();
+        ctx.fillStyle = "#2ecc71"; ctx.font = "bold 10px Arial";
+        ctx.fillText("START (s=0)", xStart - 25, 197);
+
+        let xMeta = margines + (0.25 * szerokoscRuchu) + (1.0 * (0.75 * szerokoscRuchu));
+        ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(xMeta, 142); ctx.lineTo(xMeta, 185); ctx.stroke();
+        ctx.fillStyle = "#2ecc71"; ctx.font = "bold 10px Arial";
+        ctx.fillText("META", xMeta - 12, 197);
+
+        // Zosia
+        let xZosia = margines + (posZosia * szerokoscRuchu);
+        ctx.fillStyle = "#212121"; ctx.beginPath(); ctx.arc(xZosia - 12, 168, 8, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(xZosia + 12, 168, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#e91e63"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xZosia - 12, 168); ctx.lineTo(xZosia, 160); ctx.lineTo(xZosia + 12, 168); ctx.stroke();
+        ctx.fillStyle = "#ff80ab"; ctx.beginPath(); ctx.arc(xZosia - 2, 142, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#333"; ctx.font = "bold 11px Arial"; ctx.fillText("Zosia", xZosia - 12, 131);
+
+        // Staszek
+        let xStaszek = margines + (posStaszek * szerokoscRuchu);
+        ctx.fillStyle = "#0288d1"; ctx.fillRect(xStaszek - 30, 115, 60, 18); ctx.fillRect(xStaszek - 18, 102, 35, 14);
+        ctx.fillStyle = "#212121"; ctx.beginPath(); ctx.arc(xStaszek - 16, 133, 7, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(xStaszek + 16, 133, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#ffeb3b"; ctx.fillRect(xStaszek + 26, 118, 4, 5);
+        if (czyHamuje) {
+            ctx.fillStyle = "#ff1744"; ctx.fillRect(xStaszek - 30, 117, 4, 7);
+            ctx.fillStyle = "rgba(255, 23, 68, 0.4)"; ctx.beginPath(); ctx.arc(xStaszek - 32, 120, 12, 0, Math.PI * 2); ctx.fill();
+        } else if (t > 0) { ctx.fillStyle = "#b71c1c"; ctx.fillRect(xStaszek - 30, 117, 3, 5); }
+        ctx.fillStyle = "#fff"; ctx.font = "bold 11px Arial"; ctx.fillText("Staszek", xStaszek - 20, 95);
+    }
+
+    function uruchomEksperymentAutomatyczny() {
+        if (stanGry === "RUNNING") return;
+        
+        stanGry = "RUNNING"; nastepnyKrokCzasowy = 0.0; numerProbki = 0;
+        const mBtn = document.getElementById('masterBtn');
+        const cBtn = document.getElementById('copyBtn');
+        
+        mBtn.className = "btn-game btn-running-state"; mBtn.innerHTML = "Pobór<br>Danych<br>📊⏳";
+        cBtn.disabled = true; cBtn.innerText = "Kopiuj dane do Excela 📋";
+        document.getElementById('num_dziennik').disabled = true;
+
+        const tBody = document.getElementById('table-body');
+        tBody.innerHTML = '';
+
+        const N = parseInt(document.getElementById('num_dziennik').value);
+        
+        // Kinematyka samochodu (Staszka) zależna od numeru z dziennika
+        v0StaszekGlobalny = 15.0 + (1.0 * N); 
+        tHGlobalne = 6.0 + (0.2 * N);
+        aGlobalne = -v0StaszekGlobalny / tHGlobalne; 
+        sHGlobalna = v0StaszekGlobalny * tHGlobalne + (aGlobalne * Math.pow(tHGlobalne, 2)) / 2; 
+        
+        // NOWOŚĆ: Prędkość Zosi dopasowana matematycznie, by spotkać się ze Staszkiem DOKŁADNIE po 20 sekundach (200 pomiarów)
+        vZosiaGlobalna = sHGlobalna / tSpotkaniaGlobalne;
+
+        const clockDisplay = document.getElementById('clock-display'); let startTime = performance.now();
+
+        function krokAnimacji(timestamp) {
+            let tRzeczywisty = (timestamp - startTime) / 1000;
+            tGlobalne = (tRzeczywisty * 1.5) - 3; // Lekkie przyspieszenie animacji wizualnej, by 20 sekund nie dłużyło się uczniom przed ekranem
+
+            if (tGlobalne >= tSpotkaniaGlobalne) { 
+                automatycznyZapisRekordu(tSpotkaniaGlobalne, sHGlobalna, sHGlobalna);
+                rysujScenerie(1, 1, tSpotkaniaGlobalne, false); 
+                clockDisplay.innerText = `Meta!`; 
+                stanGry = "STOPPED"; 
+                mBtn.className = "btn-game btn-start-state"; mBtn.innerHTML = "Start<br>🚀";
+                cBtn.disabled = false; 
+                document.getElementById('num_dziennik').disabled = false; 
+                animationId = null; return; 
+            }
+            
+            let sZ_biezace; let sS_biezace; let czyHamuje = false;
+
+            if (tGlobalne < 0) { 
+                sS_biezace = v0StaszekGlobalny * tGlobalne; 
+                sZ_biezace = vZosiaGlobalna * tGlobalne;
+            } else if (tGlobalne <= tHGlobalne) { 
+                sZ_biezace = vZosiaGlobalna * tGlobalne;
+                sS_biezace = v0StaszekGlobalny * tGlobalne + (aGlobalne * Math.pow(tGlobalne, 2)) / 2; 
+                czyHamuje = true; 
+            } else { 
+                sZ_biezace = vZosiaGlobalna * tGlobalne;
+                sS_biezace = sHGlobalna; 
+            }
+
+            if (tGlobalne >= 0 && tGlobalne >= nastepnyKrokCzasowy) {
+                let sS_rejestrowane = nastepnyKrokCzasowy > tHGlobalne ? sHGlobalna : (v0StaszekGlobalny * nastepnyKrokCzasowy + (aGlobalne * Math.pow(nastepnyKrokCzasowy, 2)) / 2);
+                let sZ_rejestrowane = vZosiaGlobalna * nastepnyKrokCzasowy;
+
+                automatycznyZapisRekordu(nastepnyKrokCzasowy, sZ_rejestrowane, sS_rejestrowane);
+                nastepnyKrokCzasowy += 0.1; 
+            }
+
+            let posZosiaEkran = 0.25 + (sZ_biezace / sHGlobalna) * 0.75;
+            let posStaszekEkran = 0.25 + (sS_biezace / sHGlobalna) * 0.75;
+
+            clockDisplay.innerText = tGlobalne < 0 ? "Rozbieg..." : `Czas t: ${tGlobalne.toFixed(4)} s`;
+            
+            rysujScenerie(posZosiaEkran, posStaszekEkran, tGlobalne, czyHamuje);
+            animationId = requestAnimationFrame(krokAnimacji);
+        }
+        animationId = requestAnimationFrame(krokAnimacji);
+    }
+
+    function automatycznyZapisRekordu(t, sZ, sS) {
+        const tBody = document.getElementById('table-body');
+        
+        if (sS > sHGlobalna) sS = sHGlobalna;
+        if (sZ > sHGlobalna) sZ = sHGlobalna;
+
+        const newRow = document.createElement('tr');
+        newRow.className = 'row-auto-measured';
+        
+        let etykietaProbki = t === tSpotkaniaGlobalne ? "META" : numerProbki;
+
+        newRow.innerHTML = `
+            <td><strong>${etykietaProbki}</strong></td>
+            <td>${formatujLiczbe(t)}</td>
+            <td>${formatujLiczbe(sZ)}</td>
+            <td>${formatujLiczbe(sS)}</td>
+        `;
+        
+        tBody.appendChild(newRow);
+        numerProbki++;
+
+        const wrapper = document.querySelector('.table-wrapper');
+        wrapper.scrollTop = wrapper.scrollHeight;
+    }
+
+    function kopiujTabeleDoSchowka() {
+        const rows = document.querySelectorAll("#table-pomiary tr");
+        let tekstDoSchowka = "";
+
+        rows.forEach((row) => {
+            const cells = row.querySelectorAll("th, td");
+            let wierszTekstu = [];
+            
+            cells.forEach((cell) => {
+                wierszTekstu.push(cell.innerText);
+            });
+            
+            tekstDoSchowka += wierszTekstu.join("\t") + "\n"; 
+        });
+
+        navigator.clipboard.writeText(tekstDoSchowka).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.innerText = "Skopiowano! ✓";
+            setTimeout(() => {
+                btn.innerText = "Kopiuj dane do Excela 📋";
+            }, 2000);
+        }).catch(err => {
+            alert("Nie udało się automatycznie skopiować. Zaznacz tabelę ręcznie.");
+        });
+    }
+</script>
+</body>
+</html>
